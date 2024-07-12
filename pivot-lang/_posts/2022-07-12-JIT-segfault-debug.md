@@ -1,6 +1,6 @@
 ---
 layout: post
-author: tajacks
+author: Le Boxiu
 title: Debugging a Segfault in a LLVM JIT Engine
 ---
 
