@@ -112,5 +112,3 @@ I never got good at swimming, but I did take these lessons to heart in my progra
 When dealing with problems that seem impossible to solve, it's important to break them
 down into smaller, more manageable pieces. Step by step and ensure you're moving
 forward, even if it's just a little bit.
-
-
