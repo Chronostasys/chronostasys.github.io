@@ -87,5 +87,4 @@ overhead. It's just like making every function `async` in JavaScript.
 
 ### The Proposal of Algebraic Effects in Pivot Lang
 
-TODO: some example grammar and the corresponding source code for the
-example above.
+[see the proposal](./2024-08-05-Algebraic-Effects-Proposal.md)
