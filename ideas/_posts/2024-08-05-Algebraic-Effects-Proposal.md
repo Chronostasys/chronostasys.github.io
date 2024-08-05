@@ -11,7 +11,7 @@ propose syntax and transformation rules to translate the `effects` into `generat
 
 ### Define an Effect Type
 
-A effect type should be defined just like nornal function type.
+A effect type should be defined just like normal function type.
 
 ```Rust
 effect effect1: ||i32|=>void, u32| => void;
