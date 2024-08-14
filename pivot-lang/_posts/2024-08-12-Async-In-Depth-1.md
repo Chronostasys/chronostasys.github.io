@@ -93,18 +93,134 @@ fn async_f1() Task<()> {
 
 fn async_f1_next_state(ctx: *GeneratedCtx) Option<()> {
     let task = doTask();
-    let re = task.poll(wk);
+    let re = task.poll();
     while re is None {
         yield return None;
-        re = task.poll(wk);
+        re = task.poll();
     }
     let ret = re as ()!;
     return ret as Option<()>;
 }
 ```
 
-可以看出只在普通状态机上做了点微小的改拜年，我们就实现了异步状态机。
+可以看出只在普通状态机上做了点微小的改变，我们就实现了异步状态机。
 
-### 真异步操作的包装
+### 异步操作的 `唤醒`
 
-TODO
+现在我们的`async/await`语法已经可以编译了，但是想要投入实用我们还缺少了一个重要的东西：异步任务完成后的唤醒机制。比如我们做烧水这个任务，烧水完成之后我们要用烧的热水泡澡，那么如果我们开始烧水后就不管它了，我们将永远无法洗澡。所以烧水完成的时候，需要有某种机制通知我们：水烧完了，我们可以找时间洗澡了。这个机制就是`唤醒`。
+
+由上面的编译过程我们可以看出，实际中的 `Task` 会形成一个树一样的结构，每个 `Task` 会有一个 `poll` 方法，这个方法会递归地调用子 `Task` 的 `poll` 方法。每当有子 `Task` 需要暂停的时候，这次 `poll` 就会从那个地方返回，然后所有路径上的 `Task` 都会被暂停，最终这次 `poll` 也会返回。那么当该 `Task` 完成的时候，我们就需要唤醒这个 `Task` 的父 `Task`，重新调用 `poll` 方法，这样它才可以继续执行。
+
+所以我们的 `next_state` 函数需要新加一个 `waker` 参数，该参数是一个闭包，只要调用就会唤醒对应的最顶级 `Task`。那么改造后的定义和状态机代码如下：
+
+```Rust
+trait Task<T> {
+    fn poll(waker:||=>()) Option<T>;
+}
+fn async_f1() Task<()> {
+    return GeneratedCtx{
+        block_addr: initial_addr
+    } as Task<()>;
+}
+
+fn async_f1_next_state(ctx: *GeneratedCtx, waker:||=>()) Option<()> {
+    let task = doTask();
+    let re = task.poll(waker);
+    while re is None {
+        yield return None;
+        re = task.poll(waker);
+    }
+    let ret = re as ()!;
+    return ret as Option<()>;
+}
+```
+
+可以看出生成的代码里其实没有直接调用 `waker`，而是将它传给了子 `Task` 的 `poll` 方法，实际上几乎所有情况下，`waker` 都只会被最低级别的 `Task` （叶子节点）直接调用，这样就实现了异步任务完成后的唤醒机制。
+
+在实践中，一般运行时会维护一个任务队列，由执行器对他们轮流进行执行（`poll`），而 `waker` 干的事情其实就是将对应的 `Task` 重新加入到任务队列中。
+
+执行器逻辑举例：
+
+```Rust
+struct SingleThreadExecutor {
+    pub ch:*chan::Chan<| ||=>void |=>void>;
+}
+
+pub fn new_executor(queue: *chan::Chan<|||=>void |=>void>) SingleThreadExecutor {
+    return SingleThreadExecutor {
+        ch: queue,
+    };
+}
+
+impl SingleThreadExecutor {
+    pub fn start_exec_loop() void {
+        while true {
+            let work: | ||=>void |=>void = self.ch.recv();
+            let waker = || => void {
+                self.ch.send(work);
+                return;  
+            };
+            work(waker);
+        }
+        return;
+    }
+
+    pub fn spawn<T>(task:Task<T>) void {
+        self.ch.send(|wk|=>{
+            task.poll(wk);
+            return;
+        });
+        return;
+    }
+}
+```
+
+执行器实际上在 `poll` 一个 `Task` 之前用这个 `Task` 本身创建了 `waker`。
+
+### 叶子节点 `Task` 包装
+
+叶子节点的 `Task` 其实相比别的 `Task` 来说是特殊的，他一般是一个不可再分的异步操作。想要将这种基础异步操作包装成 `Task`，我们需要创建对应的类型，并且手动为它实现 `Task` 接口。
+
+例如：
+
+```Rust
+use std::task::Task;
+use std::task::reactor;
+use std::task::executor;
+use std::thread;
+
+
+
+pub struct DelayTask {
+    first:bool;
+    ready:bool;
+    delay:u64;
+}
+
+use std::io;
+impl Task<()> for DelayTask {
+    fn poll(wk:||=>void) Option<()> {
+        if self.first {
+            self.first = false;
+            thread::spawn(||=>{
+                thread::sleep_ms(self.delay);
+                self.ready = true;
+                wk();
+            });
+        }
+
+        if self.ready {
+            return () as Option<()>;
+        }
+        return None{} as Option<()>;
+    }
+}
+
+pub fn delay(delay:u64) Task<()> {
+    return DelayTask {
+        first:true,
+        ready:false,
+        delay:delay,
+    } as Task<()>;
+}
+```
