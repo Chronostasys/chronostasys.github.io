@@ -13,7 +13,7 @@ If you want to chat, just drop me an email.
 
 I'm also a big fan of open source, here's a list of some projects I've built:
 
-### 1. [Pivot Lang](https://lang.pivotstudio.cn/)
+### 1. [Pivot Lang](https://pivotlang.tech/)
 
 A Rust-like language with immix gc and other cool stuffs, I've implement
 the well-known tutorial [Ray Tracing In One Weekend](https://github.com/Pivot-Studio/rtweekend-pl)

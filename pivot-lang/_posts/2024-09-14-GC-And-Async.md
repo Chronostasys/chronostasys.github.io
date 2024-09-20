@@ -30,12 +30,11 @@ Pinning is a mechanism to tell the GC that a certain object should not be moved.
 
 Keepalive is a mechanism to tell the GC that a certain object should not be collected, even if it's not reachable from the root. We can keep an object alive by calling `keepalive` function on it.
 
-With these two mechanisms, we can make sure the GC behaves correctly by following two rules:
+With these two mechanisms, we can make sure the GC behaves correctly by following rule:
 
-1. Pin all objects that are passed to libuv ffi functions.
-2. Keepalive all objects that are passed to libuv callbacks.
+* Pin and keepalive all objects that are directly referenced by the libuv data.
 
-In libuv we usually pass our custom data to the callbacks by associating it with the corresponding libuv handle. Those data both satisfy the two rules above, so we should just pin and keepalive them.
+In libuv we usually pass our custom data to the callbacks by associating it with the corresponding libuv handle. In such condition it is reference directly by libuv handle, so we should just pin and keepalive them.
 
 ```rust
 /// # uv_handle_set_data
@@ -71,3 +70,7 @@ pub fn new_uv_async_t() *uv_async_t {
     return unsafe_cast<uv_async_t>(re);
 }
 ```
+
+Some may argue that if the libuv handle itself is alloced and managed by the GC, is it necessary to pin and keepalive the data associated with it?
+The answer is yes, because we are allocating the handle as an `atomic` object, which means the GC has no knowledge of the internal structure of the handle,
+making it impossible to update the pointers inside the handle when it's moved.
